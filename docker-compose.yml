@@ -1,0 +1,44 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+#    environment:
+#      OLLAMA_KEEP_ALIVE: "-1"  # Usually unloads models after inactivity; set to -1 to keep the Ollama service alive indefinitely
+    volumes:
+      - ollama-data:/root/.ollama
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - 'until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull "$${OLLAMA_MODEL}"'
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-clef-flash:latest}
+    depends_on:
+      - ollama
+    restart: "no"
+
+  clef-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clef-ui
+    ports:
+      - "8080:8080"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-clef-flash:latest}
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  ollama-data:
